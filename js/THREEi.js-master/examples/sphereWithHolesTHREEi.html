@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<head>
+	<title> TriangulationSphereWithHoles </title>
+	<meta charset="utf-8" />
+</head>
+<body>
+	progress 1 <input type="range" id="range"  min="0" max="10000" value="5000" step="1" style="width: 80%;" >
+</body>
+<script src="../js/three.min.109.js"></script>
+<script src="../js/OrbitControls.js"></script>
+
+<script src="../js/THREEi.js"></script>
+<!-- for simple cases of holes is enough: -->
+<!-- <script src="../js/THREEi_ONLY_SphereWithSomeHoles.js"></script>--> 
+
+<script>
+
+// @author hofk 
+
+// Algorithmus vereinfacht nach / Algorithm simplified based on
+// de: https://www2.mathematik.tu-darmstadt.de/~ehartmann/cdg0/cdg0n.pdf
+// en: https://www2.mathematik.tu-darmstadt.de/~ehartmann/cdgen0104.pdf
+
+'use strict'
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera( 55, window.innerWidth / window.innerHeight, 0.1, 100 );
+camera.position.set( 1, 3, 3 );
+const renderer = new THREE.WebGLRenderer( { antialias: true } );
+renderer.setSize( window.innerWidth, window.innerHeight );
+renderer.setClearColor( 0x999999, 1 );	
+const container = document.createElement( 'div' );
+document.body.appendChild( container );
+container.appendChild( renderer.domElement ); 
+const controls = new THREE.OrbitControls( camera, renderer.domElement );
+const axesHelper = new THREE.AxesHelper( 1 );
+scene.add( axesHelper );
+
+// ....................................
+
+const g1 = new THREE.BufferGeometry( );	
+const parameters1 = {	
+	d: 0.07, // rough side length of the triangles, radius calculated from d and div4 
+	div4: 25, // division of the quarter of the great circle (orthodrome) 
+	holes: [
+		// circular hole, 3 elements: [ theta, phi, div4Hole ], div4Hole <= div4	
+		[ 1.57, -0.25,  9 ],
+		[ 0.44,  4.84, 18 ],
+		[ 1.23,  1.62, 11 ],
+		// points hole,: array of points theta, phi, ...  (last point is connected to first)
+		[ 1.7,-1.2,  1.7,-2.1,  2.6,-2.1 ]
+	]
+}
+
+g1.createSphereWithHoles = THREEi.createSphereWithHoles;
+g1.createSphereWithHoles( parameters1 ); // parameter object
+
+// ....................................
+
+const g2 = new THREE.BufferGeometry( );
+const detail = 50; // division of the half of the great circle (orthodrome)
+const holes = [
+	// circular hole, 3 elements: [ theta, phi, count ]	
+	[ 2.44,  0.41, 12 ],
+	[ 0.72,  2.55, 19 ],	
+	[ 1.32, -2.15, 62 ],
+	[ 1.82,  0.11, 16 ],
+	[ 1.21,  1.23, 13 ],
+	[ 2.44,  1.84, 25 ],
+	[ 3.05,  3.22, 21 ],
+	[ 2.42, -2.61, 14 ],
+	// points hole,: array of points theta, phi, ...  (last point is connected to first)
+	[ 0,0,  0.5,-0.8,  0.25,-0.27,  0.4,0.3,  0.3,0.72 ]
+
+];
+
+g2.createSphereWithHoles = THREEi.createSphereWithHoles;
+//g2.createSphereWithHoles( detail ); // holes optional
+g2.createSphereWithHoles( detail, holes );  // 
+
+//.....................................
+
+const material11 = new THREE.MeshBasicMaterial( { side: THREE.DoubleSide, color: 0x000000, wireframe: true, transparent: true, opacity: 0.99 } );
+const mesh11 = new THREE.Mesh( g1, material11 );
+mesh11.translateX( -2 );
+mesh11.translateZ( -2 );
+scene.add( mesh11 );
+const material12 = new THREE.MeshBasicMaterial( { side: THREE.FrontSide, color: 0x660066, transparent: true, opacity: 0.9 } );
+const mesh12 = new THREE.Mesh( g1, material12 );
+mesh12.translateX( -2 );
+mesh12.translateZ( -2 );
+scene.add( mesh12 );
+
+//.....................................
+
+const material21 = new THREE.MeshBasicMaterial( { side: THREE.DoubleSide, color: 0x000000, wireframe: true, transparent: true, opacity: 0.99 } );
+const mesh21 = new THREE.Mesh( g2, material21 );
+scene.add( mesh21 );
+const material22 = new THREE.MeshBasicMaterial( { side: THREE.FrontSide, color: 0x006600, transparent: true, opacity: 0.9 } );
+const mesh22 = new THREE.Mesh( g2, material22 );
+scene.add( mesh22 );
+ 
+// fit a cylinder
+const hlNo = 5; // hole No
+const lenCyl = g2.circles[ hlNo ][ 3 ] * 1.6;
+
+const cylGeo = new THREE.CylinderBufferGeometry( g2.circles[ hlNo ][ 3 ], g2.circles[ hlNo ][ 3 ], lenCyl, g2.circles[ hlNo ][ 4 ], 12, true );
+const material3 = new THREE.MeshBasicMaterial( { side: THREE.DoubleSide, color: 0x8800aa, wireframe: true } );
+const mesh3 = new THREE.Mesh( cylGeo, material3 );
+scene.add( mesh3 );
+
+const yAx = new THREE.Vector3( 0, 1, 0 );
+const cpt = new THREE.Vector3( g2.circles[ hlNo ][ 0 ], g2.circles[ hlNo ][ 1 ], g2.circles[ hlNo ][ 2 ] );
+const dp = 1 + lenCyl / 2;
+mesh3.position.set( dp * g2.circles[ hlNo ][ 0 ] , dp * g2.circles[ hlNo ][ 1 ] , dp * g2.circles[ hlNo ][ 2 ] );
+mesh3.quaternion.setFromUnitVectors( yAx, cpt.clone( ).normalize( ) );
+
+const progressFactor2 = 1;
+ 
+animate( );
+
+// ....................................
+
+function animate( ) {
+
+	g2.setDrawRange( 0, range.value * 3 * progressFactor2 );
+	
+	requestAnimationFrame( animate );
+	renderer.render( scene, camera );
+	controls.update( );
+	
+}
+
+</script>
+
+</html>

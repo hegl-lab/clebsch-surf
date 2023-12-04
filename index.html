@@ -1,0 +1,1091 @@
+<!-- Written by Ricardo Waibel; ITP and HEGL, Heidelberg -->
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+		<title>Clebsch Surface</title>
+		<link type="text/css" rel="stylesheet" href="main.css">
+		<style>
+			.label {
+				color: #FFF;
+				font-family: sans-serif;
+				/* padding: 2px; */
+				background: rgba(0, 0, 0, 0);
+			}
+
+			.author {
+				position: fixed;
+				bottom: 15px;
+				right: 30px;
+				/* transform: translate(-50%, -50%); */
+				font-size: 0.8vw;
+				font-family: 'Oswald', sans-serif;
+				color: white;
+				text-align: right;
+				z-index: 100;
+			}
+
+		</style>
+	</head>
+	<body>
+
+		<!-- Import maps polyfill -->
+		<!-- Remove this when import maps will be widely supported -->
+		<script async src="https://unpkg.com/es-module-shims@1.3.6/dist/es-module-shims.js"></script>
+
+		<script type="importmap">
+			{
+				"imports": {
+					"three": "./js/three.module.js",
+					"three/addons/": "./js/jsm/",
+					"threei": "./js/THREEi.module.js"
+				}
+			}
+		</script>
+
+		<script type="module">
+
+			import * as THREE from 'three';
+			import * as THREEi from 'threei';
+			import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+			import Stats from './js/jsm/libs/stats.module.js';
+			import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
+			import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+			let gui;
+			let stats;
+			let camera, scene, renderer;
+
+			let clebsch_mesh;
+			let surface1;
+
+			let curr_mat = 0.0;
+
+			var list_hyp_vec_a = [];
+			var list_hyp_vec_b = [];
+			var list_six_vec_a = [];
+			var list_six_vec_b = [];
+			var list_eck_vec = [];
+			var lines_hyperbolic = [];
+			var lines_double_six = [];
+			var lines_hyperbolic_length = [];
+			var lines_double_six_length = [];
+			var points_eckardt = [];
+			// var clipping_planes = [];
+
+			const lines_cyl_radius = 0.02;
+			const lines_cyl_height = 5.5;
+			const lines_cyl_n_radial_seg = 16;
+			const points_sph_radius = 0.05;
+			const points_sph_n_width_seg = 8;
+			const points_sph_n_height_seg = 8;
+
+			const colour_white = 0xFFFFFF;
+			const colour_yellow = 0xFFFF00;
+			const colour_blue = 0x0000FF;
+			const colour_red = 0xFF0000;
+			const colour_green = 0x00FF00;
+			const colour_blue_gray = 0x51667a;
+			const colour_gray = 0x555959;
+			const colour_black = 0x000000;
+
+			const colour_qual_blue = 0x000078;
+			const colour_qual_brown = 0x490d00;
+			const colour_qual_pink = 0x8a034f;
+			const colour_qual_light_blue = 0x005a8a;
+			const colour_qual_green = 0x00b25d;
+
+			// const material_line_hyper = new THREE.MeshPhysicalMaterial( { color: colour_red, metalness: 0.5, roughness: 0.1, clearcoat: 1.0 } );
+			// const material_line_double_six = new THREE.MeshPhysicalMaterial( { color: colour_green, metalness: 0.5, roughness: 0.1, clearcoat: 1.0 } );
+			// const material_point_eckardt = new THREE.MeshPhysicalMaterial( { color: colour_black, metalness: 0.5, roughness: 0.1, clearcoat: 1.0 } );
+			const material_line_hyper = new THREE.MeshPhysicalMaterial( { color: colour_qual_light_blue, metalness: 0.5, roughness: 0.1, clearcoat: 1.0 } );
+			const material_line_double_six = new THREE.MeshPhysicalMaterial( { color: colour_qual_brown, metalness: 0.5, roughness: 0.1, clearcoat: 1.0 } );
+			const material_point_eckardt = new THREE.MeshPhysicalMaterial( { color: colour_qual_pink, metalness: 0.5, roughness: 0.1, clearcoat: 1.0 } );
+			const sph_geometry = new THREE.SphereGeometry(points_sph_radius, points_sph_n_width_seg, points_sph_n_height_seg);
+
+			// var clipList = [];
+			// var clipListNegate = [];
+			// var clipListColour = [];
+			// var clebsch_surf_chess = [];
+
+			var clebsch_mesh_hyper_parts = [];
+			var clebsch_mesh_double_six_parts = [];
+			var clebsch_mesh_hyper_double_six_parts = [];
+			// const material_clebsch_1 = new THREE.MeshPhysicalMaterial( { color: colour_blue, metalness: 0.5, roughness: 0.1, clearcoat: 1.0, side: THREE.DoubleSide } );
+			// const material_clebsch_2 = new THREE.MeshPhysicalMaterial( { color: colour_green, metalness: 0.5, roughness: 0.1, clearcoat: 1.0, side: THREE.DoubleSide } );
+			const material_clebsch_1 = new THREE.MeshPhysicalMaterial( { color: colour_qual_blue, metalness: 0.5, roughness: 0.1, clearcoat: 1.0, side: THREE.DoubleSide } );
+			const material_clebsch_2 = new THREE.MeshPhysicalMaterial( { color: colour_qual_green, metalness: 0.5, roughness: 0.1, clearcoat: 1.0, side: THREE.DoubleSide } );
+
+			var switch_bool_cut_hyper = true;
+			var switch_bool_cut_double_six = true;
+
+
+			loadModels();
+			// init();
+			// animate();
+
+			// Load collection of cuts of Clebsch surface with hyperbolic lines removed
+			function loadModels() {
+				// Instantiate a loader
+				const loader = new GLTFLoader();
+				const loader2 = new GLTFLoader();
+
+				// Optional: Provide a DRACOLoader instance to decode compressed mesh data
+				// const dracoLoader = new DRACOLoader();
+				// dracoLoader.setDecoderPath( '/examples/jsm/libs/draco/' );
+				// loader.setDRACOLoader( dracoLoader );
+
+				// Load a glTF resource
+				loader.load(
+					// resource URL
+					'./clebsch-all-lines-removed-final-only-single-rem.glb',
+					// called when the resource is loaded
+					function ( gltf ) {
+
+						for (let i = 0; i < 39; i++) { //gltf.scene.children.length; i++) { 
+							clebsch_mesh_hyper_parts[i] = gltf.scene.children[i].geometry;
+						}
+						for (let i = 39; i < gltf.scene.children.length; i++) { 
+							clebsch_mesh_double_six_parts[i - 39] = gltf.scene.children[i].geometry;
+						}
+
+						// scene.add( gltf.scene );
+
+						// gltf.animations; // Array<THREE.AnimationClip>
+						// gltf.scene; // THREE.Group
+						// gltf.scenes; // Array<THREE.Group>
+						// gltf.cameras; // Array<THREE.Camera>
+						// gltf.asset; // Object
+
+						// Load a glTF resource
+						loader2.load(
+							// resource URL
+							'./clebsch-all-lines-removed-final-only-double-rem.glb',
+							// called when the resource is loaded
+							function ( gltf ) {
+
+								for (let i = 0; i < gltf.scene.children.length; i++) { 
+									clebsch_mesh_hyper_double_six_parts[i] = gltf.scene.children[i].geometry;
+								}
+								// scene.add( gltf.scene );
+
+								// gltf.animations; // Array<THREE.AnimationClip>
+								// gltf.scene; // THREE.Group
+								// gltf.scenes; // Array<THREE.Group>
+								// gltf.cameras; // Array<THREE.Camera>
+								// gltf.asset; // Object
+								init();
+								animate();
+
+							},
+							// called while loading is progressing
+							function ( xhr ) {
+								// console.log( ( xhr.loaded / xhr.total * 100 ) + '% loaded' );
+							},
+							// called when loading has errors
+							function ( error ) {
+								console.log( 'An error happened while loading double-removed models.' );
+							}
+						);
+
+					},
+					// called while loading is progressing
+					function ( xhr ) {
+						// console.log( ( xhr.loaded / xhr.total * 100 ) + '% loaded' );
+					},
+					// called when loading has errors
+					function ( error ) {
+						console.log( 'An error happened while loading single-removed models.' );
+					}
+				);
+			}
+
+			function init() {
+				camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 200);
+				camera.position.set(8, 2, 4);
+				camera.layers.enableAll();
+
+				// stats about fps on the website (frames-per-second)
+				stats = Stats();
+				document.body.appendChild( stats.dom );
+
+				scene = new THREE.Scene();
+
+				const dirLight = new THREE.DirectionalLight( 0xffffff );
+				dirLight.position.set( 0, 1, 1 );
+				dirLight.layers.enableAll();
+				scene.add( dirLight );
+
+				const intensity = 1;
+				const light_amb = new THREE.AmbientLight(colour_white, intensity);
+				light_amb.layers.enableAll();
+				scene.add(light_amb);
+
+				const axesHelper = new THREE.AxesHelper(5);
+				axesHelper.layers.set(1);
+				scene.add(axesHelper);
+				camera.layers.toggle(1);
+
+				renderer = new THREE.WebGLRenderer({antialias: true});
+				renderer.setPixelRatio(window.devicePixelRatio);
+				renderer.setSize(window.innerWidth, window.innerHeight);
+				const lovely_blue_bg = 0x605AE8;
+				const lovely_sand_gold_bg = 0xFFD700;
+				// const lovely_sand_gold_bg_2 = 0xC2B280;
+				const lovely_sand_gold_bg_3 = 0xD4AF37;
+				const lovely_lime_green_bg = 0x32CD32;
+				// const lovely_lime_green_bg_2 = 0xCEFA05;
+				renderer.setClearColor(colour_blue_gray);
+
+				renderer.localClippingEnabled = true;
+				document.body.appendChild(renderer.domElement);
+
+				const controls = new OrbitControls(camera, renderer.domElement);
+				controls.minDistance = 1.5; // how much zoom is allowed
+				controls.maxDistance = 20;
+
+				// Add Window-Resizer
+				window.addEventListener('resize', onWindowResize);
+
+				initGui();
+
+				// Create the 15 hyperbolic lines
+				createHyperbolicLines();
+
+				// Create the 12 principal double six lines
+				createDoubleSixLines();
+
+				// Create the Eckardt points on it
+				createEckardtPoints();
+
+				// Create implicit surface
+				initSurfaceMesh();
+				initSurface();
+				camera.layers.toggle(6); // turn off the continuous mesh
+
+				// Show bounding box to show boundaries of the Clebsch surface
+				// drawBox();
+
+				// Display cut models from Blender
+				displayModelHyper();
+				camera.layers.toggle(7); // turn off the hyper-cut
+				displayModelDoubleSix();
+				camera.layers.toggle(8); // turn off the double-six-cut
+				displayModelDoubleSixHyper();
+			}
+
+			function displayModelHyper() {
+				// Create list with which should have which colour (in checkerboard pattern)
+				let list_clebsch_part_colour = [];
+				list_clebsch_part_colour[0] = false; // done 
+				list_clebsch_part_colour[1] = false; // done
+				list_clebsch_part_colour[2] = true; // done
+				list_clebsch_part_colour[3] = true;
+				list_clebsch_part_colour[4] = false;
+				list_clebsch_part_colour[5] = true; // done
+				list_clebsch_part_colour[6] = true; // done
+				list_clebsch_part_colour[7] = false; // done
+				list_clebsch_part_colour[8] = true; // done
+				list_clebsch_part_colour[9] = false; // done
+				list_clebsch_part_colour[10] = false; // done
+				list_clebsch_part_colour[11] = false; // done
+				list_clebsch_part_colour[12] = true; // done
+				list_clebsch_part_colour[13] = true; // done
+				list_clebsch_part_colour[14] = false; // done
+				list_clebsch_part_colour[15] = true; // done
+				list_clebsch_part_colour[16] = false; // done
+				list_clebsch_part_colour[17] = true; // done
+				list_clebsch_part_colour[18] = true; // done
+				list_clebsch_part_colour[19] = false; // done
+				list_clebsch_part_colour[20] = true; // done 
+				list_clebsch_part_colour[21] = false; // done
+				list_clebsch_part_colour[22] = false; // done
+				list_clebsch_part_colour[23] = true; // done
+				list_clebsch_part_colour[24] = false; // done
+				list_clebsch_part_colour[25] = true; // done
+				list_clebsch_part_colour[26] = false; // done 
+				list_clebsch_part_colour[27] = false; // done
+				list_clebsch_part_colour[28] = true; // done
+				list_clebsch_part_colour[29] = false; // done
+				list_clebsch_part_colour[30] = true; // done
+				list_clebsch_part_colour[31] = false; // done
+				list_clebsch_part_colour[32] = false; // done
+				list_clebsch_part_colour[33] = true; // done
+				list_clebsch_part_colour[34] = true; // done
+				list_clebsch_part_colour[35] = true; // done
+				list_clebsch_part_colour[36] = false; // done
+				list_clebsch_part_colour[37] = false; // done
+				list_clebsch_part_colour[38] = false; // done
+
+				// Actually add to the scene
+				for (let i = 0; i < clebsch_mesh_hyper_parts.length; i++) { 
+					let this_surface;
+					if (list_clebsch_part_colour[i] == true) {
+						this_surface = new THREE.Mesh(clebsch_mesh_hyper_parts[i], material_clebsch_1);
+					} else {
+						this_surface = new THREE.Mesh(clebsch_mesh_hyper_parts[i], material_clebsch_2);
+					}
+					scene.add(this_surface);
+					this_surface.layers.set(7);
+				}
+			}
+
+			function displayModelDoubleSix() {
+				// Create list with which should have which colour (in checkerboard pattern)
+				let list_clebsch_part_colour = [];
+				list_clebsch_part_colour[0] = false; //
+				list_clebsch_part_colour[1] = true; // done
+				list_clebsch_part_colour[2] = true; // done
+				list_clebsch_part_colour[3] = false; // 
+				list_clebsch_part_colour[4] = true; // done
+				list_clebsch_part_colour[5] = true; // done
+				list_clebsch_part_colour[6] = false; // 
+				list_clebsch_part_colour[7] = false; //
+				list_clebsch_part_colour[8] = false; // done
+				list_clebsch_part_colour[9] = true; // done
+				list_clebsch_part_colour[10] = true; // done
+				list_clebsch_part_colour[11] = true; // done
+				list_clebsch_part_colour[12] = false; // done 
+				list_clebsch_part_colour[13] = false; // done
+				list_clebsch_part_colour[14] = false; // done
+				list_clebsch_part_colour[15] = false; // 
+				list_clebsch_part_colour[16] = false; // done
+				list_clebsch_part_colour[17] = true; // done
+				list_clebsch_part_colour[18] = false; // done
+				list_clebsch_part_colour[19] = true; // done
+				list_clebsch_part_colour[20] = true; // done
+				list_clebsch_part_colour[21] = false; // done
+				list_clebsch_part_colour[22] = true; // done
+				list_clebsch_part_colour[23] = false; // done
+				list_clebsch_part_colour[24] = false; // 
+				list_clebsch_part_colour[25] = true; // done
+				list_clebsch_part_colour[26] = true; // done
+				list_clebsch_part_colour[27] = true; // done
+				list_clebsch_part_colour[28] = false; // done
+				list_clebsch_part_colour[29] = true; // done
+				list_clebsch_part_colour[30] = true; // done
+
+				// Actually add to the scene
+				for (let i = 0; i < clebsch_mesh_double_six_parts.length; i++) { 
+					let this_surface;
+					if (list_clebsch_part_colour[i] == true) {
+						this_surface = new THREE.Mesh(clebsch_mesh_double_six_parts[i], material_clebsch_1);
+					} else {
+						this_surface = new THREE.Mesh(clebsch_mesh_double_six_parts[i], material_clebsch_2);
+					}
+					scene.add(this_surface);
+					this_surface.layers.set(8);
+				}
+			}
+
+			function displayModelDoubleSixHyper() {
+				// Create list with which should have which colour (in checkerboard pattern)
+				let list_clebsch_part_colour = [];
+				list_clebsch_part_colour[0] = false; // done
+				list_clebsch_part_colour[1] = false; // done
+				list_clebsch_part_colour[2] = true; // done
+				list_clebsch_part_colour[3] = false; // done
+				list_clebsch_part_colour[4] = false; // done
+				list_clebsch_part_colour[5] = true; // done
+				list_clebsch_part_colour[6] = true; // done
+				list_clebsch_part_colour[7] = true; // done
+				list_clebsch_part_colour[8] = true; // done
+				list_clebsch_part_colour[9] = true; // done
+				list_clebsch_part_colour[10] = false; // done
+				list_clebsch_part_colour[11] = false; // done
+				list_clebsch_part_colour[12] = false; // done
+				list_clebsch_part_colour[13] = true; // done
+				list_clebsch_part_colour[14] = false; // done
+				list_clebsch_part_colour[15] = false; // done
+				list_clebsch_part_colour[16] = true; // done
+				list_clebsch_part_colour[17] = false; // done
+				list_clebsch_part_colour[18] = true; // done
+				list_clebsch_part_colour[19] = true; // done
+				list_clebsch_part_colour[20] = true; // done
+				list_clebsch_part_colour[21] = true; // done
+				list_clebsch_part_colour[22] = false; // done
+				list_clebsch_part_colour[23] = false; // done
+				list_clebsch_part_colour[24] = false; // done
+				list_clebsch_part_colour[25] = true; // done
+				list_clebsch_part_colour[26] = true; // done
+				list_clebsch_part_colour[27] = false; // done
+				list_clebsch_part_colour[28] = true; // done
+				list_clebsch_part_colour[29] = true; // done
+				list_clebsch_part_colour[30] = true; // done
+				list_clebsch_part_colour[31] = false; // done 
+				list_clebsch_part_colour[32] = false; // done
+				list_clebsch_part_colour[33] = false; // done
+				list_clebsch_part_colour[34] = true; // done
+				list_clebsch_part_colour[35] = false; // done
+				list_clebsch_part_colour[36] = true; // done
+				list_clebsch_part_colour[37] = false; // done
+				list_clebsch_part_colour[38] = false; // done 
+				list_clebsch_part_colour[39] = false; // done
+				list_clebsch_part_colour[40] = true; // done
+				list_clebsch_part_colour[41] = false; // done
+				list_clebsch_part_colour[42] = false; // done
+				list_clebsch_part_colour[43] = false; // done
+				list_clebsch_part_colour[44] = true; // done
+				list_clebsch_part_colour[45] = true; // done
+				list_clebsch_part_colour[46] = true; // done
+				list_clebsch_part_colour[47] = false; // done
+				list_clebsch_part_colour[48] = false; // done
+				list_clebsch_part_colour[49] = false; // done
+				list_clebsch_part_colour[50] = true; // done
+				list_clebsch_part_colour[51] = true; // done
+				list_clebsch_part_colour[52] = true; // done
+				list_clebsch_part_colour[53] = true; // done
+				list_clebsch_part_colour[54] = true; // done
+				list_clebsch_part_colour[55] = false; // done
+				list_clebsch_part_colour[56] = false; // done
+				list_clebsch_part_colour[57] = true; // done
+				list_clebsch_part_colour[58] = true; // done
+				list_clebsch_part_colour[59] = false; // done
+				list_clebsch_part_colour[60] = true; // done
+				list_clebsch_part_colour[61] = false; // done
+				list_clebsch_part_colour[62] = true; // done
+				list_clebsch_part_colour[63] = true; // done
+				list_clebsch_part_colour[64] = false; // done
+				list_clebsch_part_colour[65] = true; // done
+				list_clebsch_part_colour[66] = false; // done
+				list_clebsch_part_colour[67] = true; // done
+				list_clebsch_part_colour[68] = false; // done
+				list_clebsch_part_colour[69] = false; // done
+				list_clebsch_part_colour[70] = true; // done
+				list_clebsch_part_colour[71] = false; // done
+				list_clebsch_part_colour[72] = false; // done
+				list_clebsch_part_colour[73] = false; // done
+				list_clebsch_part_colour[74] = false; // done
+				list_clebsch_part_colour[75] = false; // done
+				list_clebsch_part_colour[76] = true; // done
+				list_clebsch_part_colour[77] = true; // done
+				list_clebsch_part_colour[78] = true; // done
+				list_clebsch_part_colour[79] = false; // done
+				list_clebsch_part_colour[80] = false; // done
+				list_clebsch_part_colour[81] = false; // done
+				list_clebsch_part_colour[82] = true; // done
+				list_clebsch_part_colour[83] = false; // done
+				list_clebsch_part_colour[84] = false; // done
+				list_clebsch_part_colour[85] = true; // done
+				list_clebsch_part_colour[86] = true; // done
+				list_clebsch_part_colour[87] = true; // done
+				list_clebsch_part_colour[88] = false; // done
+				list_clebsch_part_colour[89] = false; // done
+				list_clebsch_part_colour[90] = true; // done
+				list_clebsch_part_colour[91] = false; // done
+				list_clebsch_part_colour[92] = true; // done
+				list_clebsch_part_colour[93] = false; // done
+				list_clebsch_part_colour[94] = false; // done
+				list_clebsch_part_colour[95] = true; // done
+				list_clebsch_part_colour[96] = true; // done
+				list_clebsch_part_colour[97] = false; // done
+				list_clebsch_part_colour[98] = false; // done
+				list_clebsch_part_colour[99] = true; // done
+				list_clebsch_part_colour[100] = true; // done
+				list_clebsch_part_colour[101] = false; // done 
+				list_clebsch_part_colour[102] = false; // done
+				list_clebsch_part_colour[103] = true; // done
+				list_clebsch_part_colour[104] = false; // done
+				list_clebsch_part_colour[105] = false; // done
+				list_clebsch_part_colour[106] = true; // done
+				list_clebsch_part_colour[107] = false; // done
+				list_clebsch_part_colour[108] = true; // done
+				list_clebsch_part_colour[109] = true; // done
+				list_clebsch_part_colour[110] = true; // done
+				list_clebsch_part_colour[111] = false; // done
+				list_clebsch_part_colour[112] = false; // done
+				list_clebsch_part_colour[113] = false; // done
+				list_clebsch_part_colour[114] = true; // done
+				list_clebsch_part_colour[115] = true; // done
+				list_clebsch_part_colour[116] = true; // done
+				list_clebsch_part_colour[117] = false; // done
+				list_clebsch_part_colour[118] = false; // done
+				list_clebsch_part_colour[119] = false; // done
+				list_clebsch_part_colour[120] = true; // done 
+				list_clebsch_part_colour[121] = false; // done
+				list_clebsch_part_colour[122] = true; // done (didnt find, doesnt matter)
+				list_clebsch_part_colour[123] = false; // done
+				list_clebsch_part_colour[124] = true; // done
+				list_clebsch_part_colour[125] = true; // done
+				list_clebsch_part_colour[126] = true; // done
+				list_clebsch_part_colour[127] = true; // done
+				list_clebsch_part_colour[128] = true; // done
+				list_clebsch_part_colour[129] = false; // done
+
+				// Actually add to the scene
+				for (let i = 0; i < clebsch_mesh_hyper_double_six_parts.length; i++) { 
+					let this_surface;
+					if (list_clebsch_part_colour[i] == true) {
+						this_surface = new THREE.Mesh(clebsch_mesh_hyper_double_six_parts[i], material_clebsch_1);
+					} else {
+						this_surface = new THREE.Mesh(clebsch_mesh_hyper_double_six_parts[i], material_clebsch_2);
+					}
+					scene.add(this_surface);
+					this_surface.layers.set(9);
+				}
+			}
+
+			// Initialize the Clebsch surface as an implicit surface
+			function initSurfaceMesh() {
+
+				// Example: implicit surface genus2:
+
+				const isf = ( x, y, z ) => ( 81*(x*x*x + y*y*y + z*z*z) - 189*(x*x*y + x*x*z + x*y*y + x*z*z + y*y*z + y*z*z) + 54*x*y*z + 126*(x*y + x*z + y*z) - 9*(x*x + y*y + z*z) - 9*(x + y + z) + 1 );
+				const dx = ( x, y, z ) => ( 9*(-1 - 2*x + 27*x*x + 6*y*z + 14*(y+z) - 21*(y*y + z*z + 2*x*(y+z))) );// PARTIAL DERIVATE to x
+				const dy = ( x, y, z ) => ( 9*(-1 - 2*y + 27*y*y + 6*x*z + 14*(x+z) - 21*(x*x + 2*x*y + z*(2*y+z))) );// PARTIAL DERIVATE to y
+				const dz = ( x, y, z ) => ( 9*(-1 - 2*z + 27*z*z + 6*x*y + 14*(x+y) - 21*(x*x + y*y + 2*z*(x+y))) );// PARTIAL DERIVATE to z
+
+				const xs = 0; // x START POINT
+				const ys = 0; // y START POINT
+				const zs = 0.1; // z START POINT
+
+				const d = 0.08; // rough edge length of triangles
+				const e = 0.001; // epsilon
+
+				// const opt = {fc: 100, pc: 10000000, b: [-2.0, 2.0, -2.0, 2.0, -2.0, 2.0]};
+				// let opt = {'b':[-2.0, 2.0, -2.0, 2.0, -2.0, 2.0]};
+				const opt = {};
+				opt.fc = 360000;
+				opt.pc = 180000;
+				opt.b = [2.0, -2.0, 2.0, -2.0, 2.0, -2.0];
+
+				clebsch_mesh = new THREE.BufferGeometry( );
+				clebsch_mesh.createImplicitSurface = THREEi.createImplicitSurface;
+				// use version (A) with opt for infinite surfaces such as cylinders and cones or for cuts
+					/*opt optional object, all properties also optional
+						{
+							fc:  faces //( max. number of triangles )
+							pc:  positions // ( max. number of points )
+							b:   bounds //  array [ xMax, xMin, yMax, yMin, zMax, zMin ]
+						}
+					*/
+
+				// (A) parameters from implicitSurface example.js, with object of optional parameters, contains bounds
+				clebsch_mesh.createImplicitSurface(isf, dx, dy, dz, xs, ys, zs, d, e, opt);
+
+				// const material1 = new THREE.MeshPhysicalMaterial( { color: colour_blue, metalness: 0.5, roughness: 0.1, clearcoat: 1.0, side: THREE.DoubleSide } );
+				// surface1 = new THREE.Mesh(clebsch_mesh, material1);
+				// scene.add(surface1);
+				// surface1.layers.enableAll();
+			}
+
+			function initSurface() {
+				// const material1 = new THREE.MeshPhysicalMaterial( { color: colour_blue, metalness: 0.5, roughness: 0.1, clearcoat: 1.0, side: THREE.DoubleSide } );
+				surface1 = new THREE.Mesh(clebsch_mesh, material_clebsch_1);
+				scene.add(surface1);
+				surface1.layers.set(6);
+
+			}
+
+			// Show bounding box to show boundaries of the Clebsch surface
+			function drawBox() {
+				var thismat = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, color: 0x000000, wireframe: true, transparent: true, opacity: 0.99 });
+				// thismat = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, color: 0x000000});
+				const thisgeo = new THREE.BoxGeometry( 4, 4, 4 ); 
+				const thissurf = new THREE.Mesh(thisgeo, thismat);
+				scene.add(thissurf);
+
+			}
+
+			// Create line (cylinder geometry) from two vectors: vec(x)(t) = vec(a) + t * vec(b)
+			function createLineFromVectors(a, b, index, this_l) {
+				const cyl_geometry = new THREE.CylinderGeometry(lines_cyl_radius, lines_cyl_radius, this_l, lines_cyl_n_radial_seg);
+
+				var this_surface;
+				if (index <= 14) { 
+					this_surface = new THREE.Mesh(cyl_geometry, material_line_hyper);
+				} else {
+					this_surface = new THREE.Mesh(cyl_geometry, material_line_double_six);
+				}
+
+				var surf_rot_quat = new THREE.Quaternion();
+				var before_axis = new THREE.Vector3(0, 1, 0).applyEuler(this_surface.rotation);
+		        surf_rot_quat.setFromUnitVectors(before_axis.normalize(), b.normalize());
+		        this_surface.applyQuaternion(surf_rot_quat);
+				this_surface.position.set(a.x, a.y, a.z);
+
+				scene.add(this_surface);
+
+				if (index <= 14) { 
+					this_surface.layers.set(2);
+					lines_hyperbolic[index] = this_surface;
+				} else {
+					this_surface.layers.set(3);
+					lines_double_six[index - 15] = this_surface;
+				}
+			}
+
+			// Create line (cylinder geometry) from two vectors: vec(x)(t) = vec(a) + t * vec(b)
+			// in such a way, that the end points coincide with the boundary of the 
+			// Clebsch surface (cube with side length 4)
+			function createFittedLineFromVectors(a, b, index) {
+				const size_cube = 4;
+				const threejs_rescale = 2;
+
+				// First, normalize vector b
+				const this_height = lines_cyl_height * b.length();
+				b.normalize();
+
+				// Get the end-points of the cylinder with those parameters
+				var end_1 = a.clone();
+				var end_2 = a.clone();
+				end_1.multiplyScalar(threejs_rescale);
+				end_2.multiplyScalar(threejs_rescale);
+				var t_1 = this_height;
+				var t_2 = -this_height;
+
+				end_1.addScaledVector(b, t_1);
+				end_2.addScaledVector(b, t_2);
+
+				// Check if maximum distance puts them outside of cube or inside
+				var step_neg_1 = true;
+				var step_neg_2 = true;
+
+				if (maxNorm(end_1) < size_cube) {
+					step_neg_1 = false;
+				}
+
+				if (maxNorm(end_2) < size_cube) {
+					step_neg_1 = false;
+				}
+
+				// Loop to find best distance for end_1
+				const this_step_length_start = 0.5;
+				const dist_to_cube_aim = 0.000000001;
+
+				var loop_counter = 0;
+				var this_step_length = this_step_length_start;
+				var step_neg_1_new;
+
+				while (Math.abs(maxNorm(end_1) - size_cube) > dist_to_cube_aim) {
+
+					// Make the step
+					if (step_neg_1 == true) {
+						if (t_1 > 0) {
+							t_1 -= this_step_length;
+						} else {
+							t_1 += this_step_length;
+						}
+					} else {
+						if (t_1 > 0) {
+							t_1 += this_step_length;
+						} else {
+							t_1 -= this_step_length;
+						}
+					}
+
+					// Get new endpoint
+					end_1.copy(a);
+					end_1.multiplyScalar(threejs_rescale);
+					end_1.addScaledVector(b, t_1);
+
+					// New endpoint inside or outside cube?
+					if (maxNorm(end_1) < size_cube) {
+						step_neg_1_new = false;
+					} else {
+						step_neg_1_new = true;
+					}
+
+					// Keep going with same step-size, if the side of the cube has not changed (from outside to inside for example)
+					if (step_neg_1 != step_neg_1_new) {
+						step_neg_1 = step_neg_1_new; // overwrite the old one for the next while-loop iteration
+						this_step_length = this_step_length / 2;
+					}
+
+					// Check that loop is not becoming infinite
+					loop_counter += 1;
+					if (loop_counter > 1000) {
+						break;
+					}
+				}
+
+				// Loop to find best distance for end_2
+				loop_counter = 0;
+				this_step_length = this_step_length_start;
+				var step_neg_2_new;
+
+				while (Math.abs(maxNorm(end_2) - size_cube) > dist_to_cube_aim) {
+
+					// Make the step
+					if (step_neg_2 == true) {
+						if (t_2 > 0) {
+							t_2 -= this_step_length;
+						} else {
+							t_2 += this_step_length;
+						}
+					} else {
+						if (t_2 > 0) {
+							t_2 += this_step_length;
+						} else {
+							t_2 -= this_step_length;
+						}
+					}
+
+					// Get new endpoint
+					end_2.copy(a);
+					end_2.multiplyScalar(threejs_rescale);
+					end_2.addScaledVector(b, t_2);
+
+					// New endpoint inside or outside cube?
+					if (maxNorm(end_2) < size_cube) {
+						step_neg_2_new = false;
+					} else {
+						step_neg_2_new = true;
+					}
+
+					// Keep going with same step-size, if the side of the cube has not changed (from outside to inside for example)
+					if (step_neg_2 != step_neg_2_new) {
+						step_neg_2 = step_neg_2_new; // overwrite the old one for the next while-loop iteration
+						this_step_length = this_step_length / 2;
+					}
+
+					// Check that loop is not becoming infinite
+					loop_counter += 1;
+					if (loop_counter > 1000) {
+						break;
+					}
+				}
+
+				// Calculate the new symmetric vec(x)(t) = vec(a) + t * vec(b) representation
+				var new_a = a.clone();
+				new_a.multiplyScalar(threejs_rescale);
+
+				// Find out, if b is pointing towards end_1 or end_2
+				var end_1_dir = end_1.clone();
+				end_1_dir.sub(a);
+				const scal_prod = end_1_dir.dot(b);
+
+				var points_to_1 = true;
+				if (scal_prod < 0) {
+					points_to_1 = false;
+				}
+
+				if (Math.abs(t_2) > Math.abs(t_1)) {
+					if (points_to_1 == false) {
+						new_a.addScaledVector(b, (Math.abs(t_2) - Math.abs(t_1)) / threejs_rescale);
+					} else {
+						new_a.addScaledVector(b, (Math.abs(t_1) - Math.abs(t_2)) / threejs_rescale);
+					}
+				} else {
+					if (points_to_1 == false) {
+						new_a.addScaledVector(b, (Math.abs(t_2) - Math.abs(t_1)) / threejs_rescale);
+					} else {
+						new_a.addScaledVector(b, (Math.abs(t_1) - Math.abs(t_2)) / threejs_rescale);
+					}
+				}
+
+				// Save length of the cylinder in the symmetric representation
+				const this_length = (Math.abs(t_1) + Math.abs(t_2)) / 2.0;
+				if (index <= 14) { 
+					lines_hyperbolic_length[index] = this_length;
+				} else {
+					lines_hyperbolic_length[index - 15] = this_length;
+				}
+
+				// Plot the line
+				new_a.divideScalar(threejs_rescale);
+				createLineFromVectors(new_a, b, index, this_length);
+
+				// for testing
+				// var end_1_new = new_a.clone();
+				// var end_2_new = new_a.clone();
+
+				// end_1_new.multiplyScalar(2);
+				// end_2_new.multiplyScalar(2);
+				// end_1_new.addScaledVector(b, t_1);
+				// end_2_new.addScaledVector(b, t_2);
+				// end_1_new.divideScalar(2);
+				// end_2_new.divideScalar(2);
+				// createPointFromVector(end_1_new, index);
+				// createPointFromVector(end_2_new, index);
+			}
+
+			function maxNorm(x) {
+				return Math.max(Math.abs(x.x), Math.abs(x.y), Math.abs(x.z));
+			}
+
+			// Create points (sphere geometry) from one given vector
+			function createPointFromVector(a, index) { 
+				var this_surface = new THREE.Mesh(sph_geometry, material_point_eckardt);
+				this_surface.position.set(a.x, a.y, a.z);
+				scene.add(this_surface);
+				this_surface.layers.set(4);
+			
+				points_eckardt[index] = this_surface;
+			}
+
+			// Create the 15 hyperbolic lines of the Clebsch surface
+			function createHyperbolicLines() { 
+				// Lines in the form: vec(x)(t) = vec(a) + t * vec(b)
+				// Line 01: D12,34
+				list_hyp_vec_a[0] = new THREE.Vector3(0.0, 0.0, -1.0/3.0);
+				list_hyp_vec_b[0] = new THREE.Vector3(1.0, -1.0, 0.0);
+				// Line 02: D12,35
+				list_hyp_vec_a[1] = new THREE.Vector3(0.0, -1.0/3.0, 0.0);
+				list_hyp_vec_b[1] = new THREE.Vector3(1.0, 0.0, -1.0);
+				// Line 03: D12,45
+				list_hyp_vec_a[2] = new THREE.Vector3(-1.0/3.0, 0.0, 0.0);
+				list_hyp_vec_b[2] = new THREE.Vector3(0.0, 1.0, -1.0);
+				// Line 04: D13,24
+				list_hyp_vec_a[3] = new THREE.Vector3(1.0/6.0, 1.0/6.0, 0.0);
+				list_hyp_vec_b[3] = new THREE.Vector3(1.0, -1.0, 0.0);
+				// Line 05: D13,25
+				list_hyp_vec_a[4] = new THREE.Vector3(1.0/3.0, 1.0/3.0, 1.0/3.0);
+				list_hyp_vec_b[4] = new THREE.Vector3(1.0, -1.0, 0.0);
+				// Line 06: D13,45
+				list_hyp_vec_a[5] = new THREE.Vector3(1.0/6.0, 0.0, 1.0/6.0);
+				list_hyp_vec_b[5] = new THREE.Vector3(1.0, 0.0, -1.0);
+				// Line 07: D14,23
+				list_hyp_vec_a[6] = new THREE.Vector3(1.0/3.0, 1.0/3.0, 1.0/3.0);
+				list_hyp_vec_b[6] = new THREE.Vector3(1.0, 0.0, -1.0);
+				// Line 08: D14,25
+				list_hyp_vec_a[7] = new THREE.Vector3(0.0, 1.0/6.0, 1.0/6.0);
+				list_hyp_vec_b[7] = new THREE.Vector3(0.0, 1.0, -1.0);
+				// Line 09: D14,35
+				list_hyp_vec_a[8] = new THREE.Vector3(1.0/3.0, 1.0/3.0, 1.0/3.0);
+				list_hyp_vec_b[8] = new THREE.Vector3(0.0, 1.0, -1.0);
+				// Line 10: D15,23
+				list_hyp_vec_a[9] = new THREE.Vector3(1.0/6.0, 0.0, 1.0/6.0);
+				list_hyp_vec_b[9] = new THREE.Vector3(3.0, 0.0, 1.0);
+				// Line 11: D15,24
+				list_hyp_vec_a[10] = new THREE.Vector3(1.0/6.0, 1.0/6.0, 0.0);
+				list_hyp_vec_b[10] = new THREE.Vector3(3.0, 1.0, 0.0);
+				// Line 12: D15,34
+				list_hyp_vec_a[11] = new THREE.Vector3(0.0, 1.0/6.0, 1.0/6.0);
+				list_hyp_vec_b[11] = new THREE.Vector3(0.0, 3.0, 1.0);
+				// Line 13: D23,45
+				list_hyp_vec_a[12] = new THREE.Vector3(1.0/6.0, 1.0/6.0, 0.0);
+				list_hyp_vec_b[12] = new THREE.Vector3(1.0, 3.0, 0.0);
+				// Line 14: D24,35
+				list_hyp_vec_a[13] = new THREE.Vector3(0.0, 1.0/6.0, 1.0/6.0);
+				list_hyp_vec_b[13] = new THREE.Vector3(0.0, 1.0, 3.0);
+				// Line 15: D25,34
+				list_hyp_vec_a[14] = new THREE.Vector3(1.0/6.0, 0.0, 1.0/6.0);
+				list_hyp_vec_b[14] = new THREE.Vector3(1.0, 0.0, 3.0);
+
+				// Actually add the lines to the scene
+				for (let i = 0; i < list_hyp_vec_a.length; i++) { 
+					createFittedLineFromVectors(list_hyp_vec_a[i], list_hyp_vec_b[i], i, lines_cyl_height);
+				}
+			}
+
+			// Create the 12 principal double six lines of the Clebsch surface
+			function createDoubleSixLines() { 
+				const sqrt5 = Math.sqrt(5.0);
+
+				// Lines in the form: vec(x)(t) = vec(a) + t * vec(b)
+				// Line 01: delta_1234
+				list_six_vec_a[0] = new THREE.Vector3((5.0 + sqrt5) / 30.0, (5.0 + 3.0 * sqrt5) / 30.0, 0.0);
+				list_six_vec_b[0] = new THREE.Vector3(1.0 + (3.0 / sqrt5), -1.0 / sqrt5, 1.0);
+				// Line 02: delta_1243
+				list_six_vec_a[1] = new THREE.Vector3((5.0 + 3.0 * sqrt5) / 30.0, (5.0 + sqrt5) / 30.0, 0.0);
+				list_six_vec_b[1] = new THREE.Vector3(-1.0 / sqrt5, 1.0 + (3.0 / sqrt5), 1.0);
+				// Line 03: delta_1342
+				list_six_vec_a[2] = new THREE.Vector3((7.0 + 3.0 * sqrt5) / 6.0, (3.0 + sqrt5) / 6.0, 0.0);
+				list_six_vec_b[2] = new THREE.Vector3(-3.0 - sqrt5, -sqrt5, 1.0);
+				// Line 04: delta_1324
+				list_six_vec_a[3] = new THREE.Vector3((3.0 + sqrt5) / 12.0, (1.0 - sqrt5) / 12.0, 0.0);
+				list_six_vec_b[3] = new THREE.Vector3((-3.0 + sqrt5) / 4.0, (-5.0 + 3.0 * sqrt5) / 4.0, 1.0);
+				// Line 05: delta_1423
+				list_six_vec_a[4] = new THREE.Vector3((1.0 + sqrt5) / 12.0, (3.0 - sqrt5) / 12.0, 0.0);
+				list_six_vec_b[4] = new THREE.Vector3((-5.0 - 3.0 * sqrt5) / 4.0, (-3.0 - sqrt5) / 4.0, 1.0);
+				// Line 06: delta_1432
+				list_six_vec_a[5] = new THREE.Vector3((3.0 - sqrt5) / 6.0, (7.0 - 3.0 * sqrt5) / 6.0, 0.0);
+				list_six_vec_b[5] = new THREE.Vector3(sqrt5, -3.0 + sqrt5, 1.0);
+				// Line 07: delta_2314
+				list_six_vec_a[6] = new THREE.Vector3((3.0 + sqrt5) / 6.0, (7.0 + 3.0 * sqrt5) / 6.0, 0.0);
+				list_six_vec_b[6] = new THREE.Vector3(-sqrt5, -3.0 - sqrt5, 1.0);
+				// Line 08: delta_2341
+				list_six_vec_a[7] = new THREE.Vector3((1.0 - sqrt5) / 12.0, (3.0 + sqrt5) / 12.0, 0.0);
+				list_six_vec_b[7] = new THREE.Vector3((-5.0 + 3.0 * sqrt5) / 4.0, (-3.0 + sqrt5) / 4.0, 1.0);
+				// Line 09: delta_2431
+				list_six_vec_a[8] = new THREE.Vector3((3.0 - sqrt5) / 12.0, (1.0 + sqrt5) / 12.0, 0.0);
+				list_six_vec_b[8] = new THREE.Vector3((-3.0 - sqrt5) / 4.0, (-5.0 - 3.0 * sqrt5) / 4.0, 1.0);
+				// Line 10: delta_2413
+				list_six_vec_a[9] = new THREE.Vector3((7.0 - 3.0 * sqrt5) / 6.0, (3.0 - sqrt5) / 6.0, 0.0);
+				list_six_vec_b[9] = new THREE.Vector3(-3.0 + sqrt5, sqrt5, 1.0);
+				// Line 11: delta_3412
+				list_six_vec_a[10] = new THREE.Vector3((5.0 - 3.0 * sqrt5) / 30.0, (5.0 - sqrt5) / 30.0, 0.0);
+				list_six_vec_b[10] = new THREE.Vector3(1.0 / sqrt5, 1.0 - (3.0 / sqrt5), 1.0);
+				// Line 12: delta_3421
+				list_six_vec_a[11] = new THREE.Vector3((5.0 - sqrt5) / 30.0, (5.0 - 3.0 * sqrt5) / 30.0, 0.0);
+				list_six_vec_b[11] = new THREE.Vector3(1.0 - (3.0 / sqrt5), 1.0 / sqrt5, 1.0);
+
+				// Rescale some of the shift vectors so that the lines are kind of "symmetric"
+				list_six_vec_a[2].addScaledVector(list_six_vec_b[2], 0.4);
+				list_six_vec_a[6].addScaledVector(list_six_vec_b[6], 0.4);
+
+				// Actually add the lines to the scene (+15 so that the function knows these are the double six lines)
+				for (let i = 0; i < list_six_vec_a.length; i++) { 
+					createFittedLineFromVectors(list_six_vec_a[i], list_six_vec_b[i], i + 15, lines_cyl_height);
+				}
+			}
+
+			// Create the 10 Eckardt points of the Clebsch surface
+			function createEckardtPoints() { 
+				// Only 7 listed in the resource
+				list_eck_vec[0] = new THREE.Vector3(1.0/6.0, 1.0/6.0, 0.0);
+				list_eck_vec[1] = new THREE.Vector3(1.0/6.0, 0.0, 1.0/6.0);
+				list_eck_vec[2] = new THREE.Vector3(0.0, 1.0/6.0, 1.0/6.0);
+				list_eck_vec[3] = new THREE.Vector3(1.0/3.0, 1.0/3.0, 1.0/3.0);
+				list_eck_vec[4] = new THREE.Vector3(-1.0/3.0, 0.0, 0.0);
+				list_eck_vec[5] = new THREE.Vector3(0.0, -1.0/3.0, 0.0);
+				list_eck_vec[6] = new THREE.Vector3(0.0, 0.0, -1.0/3.0);
+
+				// Actually add the points to the scene
+				for (let i = 0; i < list_eck_vec.length; i++) { 
+					createPointFromVector(list_eck_vec[i], i);
+				}
+			}
+
+			// Function to resize inner window in case it is necessary
+			function onWindowResize() {
+				camera.aspect = window.innerWidth / window.innerHeight;
+				camera.updateProjectionMatrix();
+				renderer.setSize(window.innerWidth, window.innerHeight);
+			}
+
+			// Main function that controls the animation
+			function animate() {
+				requestAnimationFrame(animate);
+
+				// Render the scene
+				renderer.render(scene, camera);
+				stats.update()
+			}
+
+			// Remove torus from scene
+			function disposeClebschSurf() {
+				if (curr_mat == 1) {
+					surface1.geometry.dispose();
+					surface1.material.dispose();
+					scene.remove(surface1);
+					surface2.geometry.dispose();
+					surface2.material.dispose();
+					scene.remove(surface2);
+				} else {
+					surface1.geometry.dispose();
+					surface1.material.dispose();
+					scene.remove(surface1);
+				}
+			}
+
+			function initGui() {
+				gui = new GUI();
+
+				const deform_param = {
+					cutHyper: switch_bool_cut_hyper,
+					cutDoubleSix: switch_bool_cut_double_six
+				};
+
+				const obj_param = {
+					'Toggle Sphere': function () {
+						if (switch_bool_sphere_group == false) {
+							switch_bool_sphere_group = true;
+						} else {
+							switch_bool_sphere_group = false;
+						}
+						camera.layers.toggle(2);
+					},
+					'Toggle Axes': function () {
+						camera.layers.toggle(1);
+					},
+					'Toggle Hyperbolic': function () {
+						camera.layers.toggle(2);
+					},
+					'Toggle Double Six': function () {
+						camera.layers.toggle(3);
+					},
+					'Toggle Eckardt': function () {
+						camera.layers.toggle(4);
+					}
+				};
+
+				const obj_folder = gui.addFolder('Objects');
+				const deform_folder = gui.addFolder('Checkerboard Patterm');
+
+				obj_folder.add(obj_param, 'Toggle Axes').name('Toggle Axes');
+				obj_folder.add(obj_param, 'Toggle Hyperbolic').name('Toggle Hyperbolic Lines');
+				obj_folder.add(obj_param, 'Toggle Double Six').name('Toggle Double Six Lines');
+				obj_folder.add(obj_param, 'Toggle Eckardt').name('Toggle Eckardt Points');
+
+				deform_folder.add(deform_param, 'cutHyper').name('Cut Hyperbolic')
+				.setValue(switch_bool_cut_hyper)
+        		.onChange(onChangeCutHyper);
+
+				deform_folder.add(deform_param, 'cutDoubleSix').name('Cut Double-Six')
+				.setValue(switch_bool_cut_double_six)
+        		.onChange(onChangeCutDoubleSix);
+
+				// deform_folder.add(deform_param, 'pos1', 0.0, max_pos_sphere_1, pos_sphere_slider_spacing).name('Move Left/Right')
+				// .setValue(curr_pos_sphere_1)
+        		// .onChange(onChangeSpherePos1);
+				//
+				// deform_folder.add(deform_param, 'pos2', 0.0, max_pos_sphere_2, pos_sphere_slider_spacing).name('Move Up/Down')
+				// .setValue(curr_pos_sphere_2)
+        		// .onChange(onChangeSpherePos2);
+
+				obj_folder.open();
+				// obj_folder.close();
+				deform_folder.open();
+			}
+
+			function onChangeCutHyper(this_new_bool_cut_hyper) {
+				if (this_new_bool_cut_hyper != switch_bool_cut_hyper) {
+					// Show the correct version of the Clebsch surface
+					updateSurfaceShowOff();
+
+					switch_bool_cut_hyper = this_new_bool_cut_hyper;
+					updateSurfaceShowOn();
+				}
+    		}
+
+			function onChangeCutDoubleSix(this_new_bool_cut_double_six) {
+				if (this_new_bool_cut_double_six != switch_bool_cut_double_six) {
+					// Show the correct version of the Clebsch surface
+					updateSurfaceShowOff();
+
+					switch_bool_cut_double_six = this_new_bool_cut_double_six;
+					updateSurfaceShowOn();
+				}
+    		}
+
+			function updateSurfaceShowOff() {
+				if (switch_bool_cut_hyper == true) {
+					if (switch_bool_cut_double_six == true) {
+						camera.layers.toggle(9);
+					} else {
+						camera.layers.toggle(7);
+					}
+				} else {
+					if (switch_bool_cut_double_six == true) {
+						camera.layers.toggle(8);
+					} else {
+						camera.layers.toggle(6);
+					}
+				}
+			}
+
+			function updateSurfaceShowOn() {
+				if (switch_bool_cut_hyper == true) {
+					if (switch_bool_cut_double_six == true) {
+						camera.layers.toggle(9);
+					} else {
+						camera.layers.toggle(7);
+					}
+				} else {
+					if (switch_bool_cut_double_six == true) {
+						camera.layers.toggle(8);
+					} else {
+						camera.layers.toggle(6);
+					}
+				}
+			}
+
+		</script>
+
+		<!-- <div id="simulationcredits" class="author"><b>Author:</b> Ricardo Waibel, <a href="https://www.thphys.uni-heidelberg.de">ITP</a>, <a href="https://hegl.mathi.uni-heidelberg.de">HEGL</a>.</div> -->
+	</body>
+</html>
